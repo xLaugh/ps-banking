@@ -1,4 +1,5 @@
 local framework = nil
+local bankBlips = {}
 
 RegisterNUICallback("ps-banking:client:getLocales", function(_, cb)
     cb(lib.getLocales())
@@ -25,6 +26,11 @@ end)
 
 Citizen.CreateThread(function()
     local zoneId = 1
+    for _, blip in pairs(bankBlips) do
+        RemoveBlip(blip)
+    end
+    bankBlips = {}
+
     for _, location in pairs(Config.BankLocations.Coords) do
         local zoneName = "bank_" .. zoneId
         if Config.TargetSystem == "interact" then
@@ -60,33 +66,32 @@ Citizen.CreateThread(function()
                 },
             })
         else
-        exports["qb-target"]:AddBoxZone(zoneName, vector3(location.x, location.y, location.z), 1.5, 1.6, {
-            name = zoneName,
-            heading = 0.0,
-            debugPoly = false,
-            minZ = location.z - 1,
-            maxZ = location.z + 1,
-        }, {
-            options = {
-                {
-                    icon = "fas fa-credit-card",
-                    label = locale("openBank"),
-                    action = function()
-                        SendNUIMessage({
-                            action = "openBank",
-                        })
-                        SetNuiFocus(true, true)
-                    end,
+            exports["qb-target"]:AddBoxZone(zoneName, vector3(location.x, location.y, location.z), 1.5, 1.6, {
+                name = zoneName,
+                heading = 0.0,
+                debugPoly = false,
+                minZ = location.z - 1,
+                maxZ = location.z + 1,
+            }, {
+                options = {
+                    {
+                        icon = "fas fa-credit-card",
+                        label = locale("openBank"),
+                        action = function()
+                            SendNUIMessage({
+                                action = "openBank",
+                            })
+                            SetNuiFocus(true, true)
+                        end,
+                    },
                 },
-            },
-            distance = 2.5,
-        })
+                distance = 2.5,
+            })
+        end
         zoneId = zoneId + 1
     end
-
     for i = 1, #Config.BankLocations.Coords do
-        local blip = AddBlipForCoord(vector3(Config.BankLocations.Coords[i].x, Config.BankLocations.Coords[i].y,
-            Config.BankLocations.Coords[i].z))
+        local blip = AddBlipForCoord(Config.BankLocations.Coords[i].x, Config.BankLocations.Coords[i].y, Config.BankLocations.Coords[i].z)
         SetBlipSprite(blip, Config.BankLocations.Blips.sprite)
         SetBlipDisplay(blip, 4)
         SetBlipScale(blip, Config.BankLocations.Blips.scale)
@@ -95,20 +100,36 @@ Citizen.CreateThread(function()
         BeginTextCommandSetBlipName("STRING")
         AddTextComponentSubstringPlayerName(Config.BankLocations.Blips.name)
         EndTextCommandSetBlipName(blip)
-        end
+        table.insert(bankBlips, blip)
     end
 end)
 
 -- ATMs
 RegisterNetEvent('ps-banking:client:open:atm')
 AddEventHandler('ps-banking:client:open:atm', function()
-	Citizen.Wait(100)
-    ATM_Animation()
-    SendNUIMessage({
-        action = "openATM",
-    })
-    SetNuiFocus(true, true)
+    local xPlayer = ESX.GetPlayerData()
+    local hasCard = false
+
+    for i=1, #xPlayer.inventory, 1 do
+        local item = xPlayer.inventory[i]
+        if item.name == 'cartebancaire' and item.count > 0 then
+            hasCard = true
+            break
+        end
+    end
+
+    if hasCard then
+        Citizen.Wait(100)
+        ATM_Animation()
+        SendNUIMessage({
+            action = "openATM",
+        })
+        SetNuiFocus(true, true)
+    else
+        ESX.ShowNotification("Vous devez avoir une carte bancaire pour utiliser un ATM.")
+    end
 end)
+
 
 function ATM_Animation()
 	lib.playAnim(cache.ped, Config.ATM_Animation.dict, Config.ATM_Animation.name, 8.0, -8.0, -1, Config.ATM_Animation.flag, 0, false, 0, false)
